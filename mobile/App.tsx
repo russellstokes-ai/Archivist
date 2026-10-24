@@ -7,7 +7,7 @@ import {LivePlayerSkipIcon} from './LivePlayerSkipIcon';
 import {MiniAudioWaveform} from './MiniAudioWaveform';
 import {LivingBookCoverSession,lockLivingBookCoverSession,resolveLivingBookCover} from './livingBookCover';
 import {PLAYER_SKIP, PlayerSeekQueue} from './playerTransport';
-import {populationMessage} from './assistMetadata/progress';
+import {populationMessage,populationMeter} from './assistMetadata/progress';
 import React, {useEffect, useLayoutEffect, useMemo, useState, useRef} from 'react';
 import {
   AccessibilityInfo,
@@ -82,7 +82,7 @@ import {atlasFit, atlasZoomAt, atlasConstrain, atlasNearest, atlasLabels, atlasB
 import {localRelationClassification} from './duplicates';
 import {normalizeLibrarySummary, normalizeServerWork} from './serverCompatibility';
 import {getPersistedJSON, setPersistedJSON} from './stateStore';
-import {loadLocalStageBooks, migrateLegacyLocalStage, replaceLocalStageBooks} from './localStageStore';
+import {loadLocalStageBooks, migrateLegacyLocalStage, replaceLocalStageBooks, upsertLocalStageBooks} from './localStageStore';
 import {defaultMetadataSettings, MetadataSettings, sanitizeMetadataSettings} from './metadataSettings';
 import {LibrarySource, WorkSource, dedupeForAll, matchesSource, normalizeSpaceSelection, sourceIdentity, sourceLabel, spacesForSource} from './librarySources';
 import {SmartShelfDefinition, SmartShelfField, SmartShelfOperator, SmartShelfRule, SmartShelfRuleGroup, LibraryCollection, addGroupAtPath, addRuleAtPath, applySmartShelf, collectionWorks, emptySmartShelfRules, legacyRules, newOrganisationId, smartShelfPresets, removeRuleNode, replaceRuleNode, sanitizeCollections, sanitizeSmartShelves, toggleCollectionWork} from './libraryOrganisation';
@@ -813,9 +813,12 @@ function Client() {
   const [serverBooksLoadingMore, setServerBooksLoadingMore] = useState(false);
   const [localFolders, setLocalFolders] = useState<LocalFolder[]>([]);
   const [populationStatus,setPopulationStatus]=useState('');
+  const [populationSnapshot,setPopulationSnapshot]=useState<{enabled:boolean;counts:Record<string,number>;operation?:string;preparing?:{processed:number;total:number}|null}|null>(null);
+  const populationStats=populationMeter(populationSnapshot?.counts||{});
   const [fileWriteSummary,setFileWriteSummary]=useState('');
   const [populating,setPopulating]=useState(false);
   const populationOwner=useRef<AbortController|null>(null);
+  const populationRunning=populating||!!populationSnapshot?.preparing||!!populationSnapshot?.enabled&&populationStats.waiting>0;
   const [libraryPreparedSignature,setLibraryPreparedSignature]=useState('');
   const [localFolderNotice, setLocalFolderNotice] = useState('');
   const [localScanning, setLocalScanning] = useState(false);
@@ -1186,7 +1189,7 @@ function Client() {
           const waiting=(counts.pending||0)+(counts.running||0)+(counts.retry||0);
           setFileWriteSummary(operation|| (waiting?`${waiting} file updates queued; ${counts.done||0} completed.`:counts.blocked?`${counts.blocked} file updates need attention. Your library details are saved.`:''));
         }).catch(()=>{if(alive)setFileWriteSummary('File-saving status is unavailable. Your library remains accessible.');});
-        void runtime.populationProgress().then(({enabled,counts})=>{if(alive)setPopulationStatus(populationMessage(enabled,counts));}).catch(()=>{});
+        void runtime.populationProgress().then(progress=>{if(alive){setPopulationSnapshot(progress);setPopulationStatus(populationMessage(progress.enabled,progress.counts));}}).catch(()=>{});
         if(id)void runtime.refresh(id).then(rows=>{if(alive)return applyScannerRows(rows);}).catch(()=>{});
       };
       unsubscribe=runtime.subscribe(update);update();
@@ -1198,9 +1201,9 @@ function Client() {
   async function applyScannerRows(rows:ScannerBook[]){
     const id=rows[0]?.scannerWorkId;if(!id)return;
     const commit=scannerRowsCommit.current.catch(()=>undefined).then(async()=>{
-      const current=await loadLocalStageBooks();
-      const updated=[...current.filter(book=>(book as ScannerBook).scannerWorkId!==id),...rows];
-      await replaceLocalStageBooks(updated);setLocalBooks(updated);
+      // Metadata updates keep membership and order; persist only this work.
+      await upsertLocalStageBooks(rows);
+      setLocalBooks(current=>{const byUri=new Map(rows.map(row=>[row.uri,row]));return current.map(book=>book.uri?byUri.get(book.uri)||book:book);});
       setEditing(old=>old?.scannerWorkId===id?{...old,reviewReason:rows[0].reviewReason,needsReview:rows[0].needsReview,metadataFileStatus:(rows[0] as {metadataFileStatus?:string}).metadataFileStatus}:old);
     });scannerRowsCommit.current=commit;return commit;
   }
@@ -3012,7 +3015,7 @@ function Client() {
     if(!baselinePersisted||!scanCommitGate.isCurrent(generation))return null;
 
     setScanResultSummary(summary);
-    if(result.review>0)openMetadataReview();
+    // Keep scan completion on the current screen; review is a user action after population.
     setLocalFolders(result.folders);
     setLocalBooks(nextBooks);
     setLocalMovePreviews([]);
@@ -3038,17 +3041,20 @@ function Client() {
     if(populationOwner.current||libraryRefreshActive)return;
     const owner=new AbortController();populationOwner.current=owner;setPopulating(true);
     const total=new Set(localBooks.map(book=>(book as ScannerBook).scannerWorkId).filter(Boolean)).size;
-    setPopulationStatus('Identifying 0 of '+total+' items');
+    setPopulationStatus('Preparing '+total+' items for identification');
+    setPopulationSnapshot({enabled:true,counts:{pending:total},preparing:{processed:0,total}});
     try{
       const runtime=await freshRuntime();
-      await runtime.enrich(localBooks.filter((book):book is Book & LocalBook=>typeof book.uri==='string'&&book.uri.length>0),{...assistPolicy(true),automatic:true},async rows=>{
-        if(owner.signal.aborted||populationOwner.current!==owner)return;
-        await applyScannerRows(rows);
-        const progress=await runtime.populationProgress();setPopulationStatus(populationMessage(progress.enabled,progress.counts));
-      },owner.signal);
-      if(!owner.signal.aborted){const progress=await runtime.populationProgress();setPopulationStatus(populationMessage(progress.enabled,progress.counts));}
+      await runtime.enrich(localBooks.filter((book):book is Book & LocalBook=>typeof book.uri==='string'&&book.uri.length>0),{...assistPolicy(true),automatic:true},undefined,owner.signal);
+      if(!owner.signal.aborted){const progress=await runtime.populationProgress();setPopulationSnapshot(progress);setPopulationStatus(populationMessage(progress.enabled,progress.counts));}
     }catch{if(!owner.signal.aborted)setPopulationStatus('Population paused. Your progress is saved; press Identify & populate to retry.');}
     finally{if(populationOwner.current===owner){populationOwner.current=null;setPopulating(false);}}
+  }
+
+  async function cancelPopulation(){
+    populationOwner.current?.abort();
+    try{const runtime=await freshRuntime();await runtime.pausePopulation();const progress=await runtime.populationProgress();setPopulationSnapshot(progress);setPopulationStatus(populationMessage(false,progress.counts));}
+    catch{setPopulationStatus('Unable to confirm population pause. Please try again.');}
   }
 
   async function checkpointLocalEnrichment(books:LocalBook[],generation:number){
@@ -3359,7 +3365,8 @@ function Client() {
   }
 
   async function rescanLocalFolders(overrides:Record<string,LocalMetadataOverride>=localMetadataOverrides,refreshMetadata=false) {
-    populationOwner.current?.abort();setPopulationStatus('');
+    populationOwner.current?.abort();setPopulationStatus('');setPopulationSnapshot(null);
+    if(Platform.OS==='android')await (await freshRuntime()).pausePopulation();
     if(libraryRefreshRunningRef.current)return;
     if(!localFolders.length)return;
     setError('');
@@ -4496,13 +4503,13 @@ function Client() {
           <View style={{flex:1,gap:4}}>
             <Text style={[styles.onboardingStepTitle,{color:p.ink}]}>Identify &amp; populate</Text>
             <Text style={[styles.meta,{color:p.muted}]}>{setupReady
-              ? (localBooks.length+serverWorks.length)+' items ready'+(reviewCount?' · '+reviewCount+' local items need review':'')
+              ? populationStats.complete?'Identification finished. Review only the remaining items.':(localBooks.length+serverWorks.length)+' items ready to identify'
               : progress
                 ? scanPhaseLabel(progress.phase)+' · '+progressPercent+'%'
                 : hasSource?'Ready to prepare metadata and covers.':'Starts after library folders are added.'}</Text>
             {progress?<View style={[styles.scanProgressTrack,{backgroundColor:p.line}]}><View style={[styles.scanProgressFill,{backgroundColor:p.sage,width:(progressPercent+'%') as `${number}%`}]} /></View>:null}
           </View>
-          {setupReady?<Text accessibilityLabel="Step 2 complete" style={{color:p.sage,fontWeight:'800'}}>✓</Text>:null}
+          {populationStats.complete?<Text accessibilityLabel="Step 2 complete" style={{color:p.sage,fontWeight:'800'}}>✓</Text>:null}
         </View>
 
         <View style={styles.onboardingStep}>
@@ -4534,14 +4541,31 @@ function Client() {
         {!hasServer&&!shelfServerPromptHidden?<Pressable accessibilityRole="button" onPress={()=>void useArchivistLocallyOnly()} style={styles.shelfLocalOnlyAction}><Text style={[styles.meta,{color:p.muted,fontWeight:'600'}]}>Use Archivist locally only</Text></Pressable>:null}
 
         {preparing&&!libraryRefreshActive?<Button label={busy?'Scanning…':'Scan library'} disabled={busy} onPress={()=>void prepareOnboardingLibrary()}/>:null}
-        {setupReady&&hasFolder?<Button label={populating?'Cancel population':'Identify & populate'} onPress={()=>populating?populationOwner.current?.abort():void populateLibrary()}/>:null}
-        {populationStatus?<Text accessibilityLiveRegion="polite" style={[styles.meta,{color:p.muted}]}>{populationStatus}</Text>:null}
+        {setupReady&&hasFolder?<Button label={populationRunning?'Cancel population':'Identify & populate'} onPress={()=>populationRunning?void cancelPopulation():void populateLibrary()}/>:null}
+        <PopulationStatus/>
         {setupReady&&hasBooks?<View style={styles.shelfSetupActions}>
           <View style={styles.shelfSetupAction}><Button label="Complete missing details" onPress={openMetadataReview}/></View>
           <View style={styles.shelfSetupAction}><Button label="Start using library" tone="quiet" onPress={()=>void finishOnboarding()}/></View>
         </View>:null}
       </View>
     );
+  }
+
+  function PopulationStatus(){
+    if(!populationSnapshot?.preparing&&!populationStats.total)return populationStatus?<Text accessibilityLiveRegion="polite" style={[styles.meta,{color:p.muted}]}>{populationStatus}</Text>:null;
+    const preparing=populationSnapshot?.preparing;
+    const percent=preparing?(preparing.total?Math.floor(preparing.processed/preparing.total*100):0):populationStats.percent;
+    const count=preparing?preparing.processed+' / '+preparing.total:populationStats.processed+' / '+populationStats.total;
+    return <View accessibilityLiveRegion="polite" style={[styles.scanBanner,styles.scanBannerStable,{borderTopColor:p.line,borderBottomColor:p.line}]}>
+      {populationRunning?<ArchivistBookLoader label="Identifying library" size="standard" reduceMotion={reduceMotion}/>:null}
+      <View style={{flex:1,minWidth:0,gap:3}}>
+        <View style={styles.scanProgressHeading}><Text style={[styles.scanBannerTitle,{color:p.ink}]}>{preparing?'Preparing identification':populationStats.complete?'Identification complete':populationRunning?'Identify & populate':'Population paused'}</Text><Text style={[styles.scanProgressPercent,{color:p.muted}]}>{count} · {percent}%</Text></View>
+        <Text style={[styles.scanBannerDetail,{color:p.muted}]}>{populationStats.identified} identified · {populationStats.unresolved} unresolved · {populationStats.retrying} waiting to retry</Text>
+        {populationSnapshot?.operation?<Text numberOfLines={2} style={[styles.scanBannerDetail,{color:p.muted}]}>{populationSnapshot.operation}</Text>:null}
+        <View accessibilityRole="progressbar" accessibilityValue={{min:0,max:100,now:percent}} style={[styles.scanProgressTrack,{backgroundColor:p.line}]}><View style={[styles.scanProgressFill,{backgroundColor:p.sage,width:(percent+'%') as any}]} /></View>
+        <Text style={[styles.scanBannerDetail,{color:p.muted}]}>{preparing?'Preparing the saved work queue.':populationStatus}</Text>
+      </View>
+    </View>;
   }
 
   function LocalScanStatus(){
@@ -7996,8 +8020,8 @@ function Client() {
             <Text style={[styles.settingsSectionTitle,{color:p.muted}]}>NEEDS ATTENTION</Text>
             <Text style={[styles.settingsSectionTitle,{color:p.muted}]}>IDENTIFY & POPULATE</Text>
             <Text style={[styles.meta,{color:p.muted}]}>Assist uses the saved scan to find matches, fill available details and covers, then save confirmed metadata to your files.</Text>
-            <Button label={populating?'Cancel population':'Identify & populate'} disabled={!localBooks.length||libraryRefreshActive} onPress={()=>populating?populationOwner.current?.abort():void populateLibrary()}/>
-            {populationStatus?<Text accessibilityLiveRegion="polite" style={[styles.meta,{color:p.muted}]}>{populationStatus}</Text>:null}
+            <Button label={populationRunning?'Cancel population':'Identify & populate'} disabled={!localBooks.length||libraryRefreshActive} onPress={()=>populationRunning?void cancelPopulation():void populateLibrary()}/>
+            <PopulationStatus/>
             {fileWriteSummary?<Text accessibilityLiveRegion="polite" style={[styles.meta,{color:p.muted}]}>{fileWriteSummary}</Text>:null}
             <Text style={[styles.settingsSectionTitle,{color:p.muted}]}>COMPLETE MISSING DETAILS</Text>
             <Text style={[styles.meta,{color:p.muted}]}>{reviewCount?'Review uncertain books, save any corrections, then let Assist fill missing details.':'Assist fills available genres and years automatically. Only uncertain identities need your help.'} Moving files is optional.</Text>

@@ -510,9 +510,89 @@
         {
           "old": "    const serverReview=session?(serverSummary?.needsReview||0):0;\n    const reviewCount=localReview+serverReview;\n    const serverPathFor=(work:UnifiedWork)=>work.source==='server'&&work.serverWork&&session&&(!work.server||work.server===session.server)?'/api/works/'+work.serverWork.id+'/cover':undefined;\n    const workArtwork=(work:UnifiedWork)=><Artwork session={session} p={p} title={work.title} format={work.format} coverShape={work.format==='Audio'?'square':'portrait'} coverUri={work.coverUri} serverPath={serverPathFor(work)}/>;\n    const renderWorks=(works:UnifiedWork[])=>works.length?<ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.curatedRow}>{works.map(work=><View key={work.key} style={styles.curatedCardWrap}>{UnifiedWorkCard({work})}</View>)}</ScrollView>:null;\n\n    const openLibraryBrowse=({family='',source='all'}:{family?:LibraryFormatFamily;source?:LibrarySource})=>{\n",
           "new": "    const serverReview=session?(serverSummary?.needsReview||0):0;\n    const reviewCount=localReview+serverReview;\n    const serverPathFor=(work:UnifiedWork)=>work.source==='server'&&work.serverWork&&session&&(!work.server||work.server===session.server)?'/api/works/'+work.serverWork.id+'/cover':undefined;\n    const workArtwork=(work:UnifiedWork)=><Artwork session={session} p={p} title={work.title} format={work.format} coverShape={work.format==='Audio'?'square':'portrait'} coverUri={work.coverThumbnailUri||work.coverUri} serverPath={serverPathFor(work)}/>;\n    const renderWorks=(works:UnifiedWork[])=>works.length?<ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.curatedRow}>{works.map(work=><View key={work.key} style={styles.curatedCardWrap}>{UnifiedWorkCard({work})}</View>)}</ScrollView>:null;\n\n    const openLibraryBrowse=({family='',source='all'}:{family?:LibraryFormatFamily;source?:LibrarySource})=>{\n"
+        },
+        {
+          "old": "import {populationMessage} from './assistMetadata/progress';",
+          "new": "import {populationMessage,populationMeter} from './assistMetadata/progress';"
+        },
+        {
+          "old": "import {loadLocalStageBooks, migrateLegacyLocalStage, replaceLocalStageBooks} from './localStageStore';",
+          "new": "import {loadLocalStageBooks, migrateLegacyLocalStage, replaceLocalStageBooks, upsertLocalStageBooks} from './localStageStore';"
+        },
+        {
+          "old": "  const [populationStatus,setPopulationStatus]=useState('');",
+          "new": "  const [populationStatus,setPopulationStatus]=useState('');\n  const [populationSnapshot,setPopulationSnapshot]=useState<{enabled:boolean;counts:Record<string,number>;operation?:string;preparing?:{processed:number;total:number}|null}|null>(null);\n  const populationStats=populationMeter(populationSnapshot?.counts||{});"
+        },
+        {
+          "old": "  const populationOwner=useRef<AbortController|null>(null);",
+          "new": "  const populationOwner=useRef<AbortController|null>(null);\n  const populationRunning=populating||!!populationSnapshot?.preparing||!!populationSnapshot?.enabled&&populationStats.waiting>0;"
+        },
+        {
+          "old": "void runtime.populationProgress().then(({enabled,counts})=>{if(alive)setPopulationStatus(populationMessage(enabled,counts));}).catch(()=>{});",
+          "new": "void runtime.populationProgress().then(progress=>{if(alive){setPopulationSnapshot(progress);setPopulationStatus(populationMessage(progress.enabled,progress.counts));}}).catch(()=>{});"
+        },
+        {
+          "old": "      const current=await loadLocalStageBooks();\n      const updated=[...current.filter(book=>(book as ScannerBook).scannerWorkId!==id),...rows];\n      await replaceLocalStageBooks(updated);setLocalBooks(updated);",
+          "new": "      // Metadata updates keep membership and order; persist only this work.\n      await upsertLocalStageBooks(rows);\n      setLocalBooks(current=>{const byUri=new Map(rows.map(row=>[row.uri,row]));return current.map(book=>byUri.get(book.uri)||book);});"
+        },
+        {
+          "old": "    if(result.review>0)openMetadataReview();",
+          "new": "    // Keep scan completion on the current screen; review is a user action after population."
+        },
+        {
+          "old": "    setPopulationStatus('Identifying 0 of '+total+' items');",
+          "new": "    setPopulationStatus('Preparing '+total+' items for identification');\n    setPopulationSnapshot({enabled:true,counts:{pending:total},preparing:{processed:0,total}});"
+        },
+        {
+          "old": "{...assistPolicy(true),automatic:true},async rows=>{\n        if(owner.signal.aborted||populationOwner.current!==owner)return;\n        await applyScannerRows(rows);\n        const progress=await runtime.populationProgress();setPopulationStatus(populationMessage(progress.enabled,progress.counts));\n      },owner.signal);",
+          "new": "{...assistPolicy(true),automatic:true},undefined,owner.signal);"
+        },
+        {
+          "old": "      if(!owner.signal.aborted){const progress=await runtime.populationProgress();setPopulationStatus(populationMessage(progress.enabled,progress.counts));}",
+          "new": "      if(!owner.signal.aborted){const progress=await runtime.populationProgress();setPopulationSnapshot(progress);setPopulationStatus(populationMessage(progress.enabled,progress.counts));}"
+        },
+        {
+          "old": "  async function checkpointLocalEnrichment",
+          "new": "  async function cancelPopulation(){\n    populationOwner.current?.abort();\n    try{const runtime=await freshRuntime();await runtime.pausePopulation();const progress=await runtime.populationProgress();setPopulationSnapshot(progress);setPopulationStatus(populationMessage(false,progress.counts));}\n    catch{setPopulationStatus('Unable to confirm population pause. Please try again.');}\n  }\n\n  async function checkpointLocalEnrichment"
+        },
+        {
+          "old": "populationOwner.current?.abort();setPopulationStatus('');",
+          "new": "populationOwner.current?.abort();setPopulationStatus('');setPopulationSnapshot(null);\n    if(Platform.OS==='android')await (await freshRuntime()).pausePopulation();"
+        },
+        {
+          "old": "        {setupReady&&hasFolder?<Button label={populating?'Cancel population':'Identify & populate'} onPress={()=>populating?populationOwner.current?.abort():void populateLibrary()}/>:null}",
+          "new": "        {setupReady&&hasFolder?<Button label={populationRunning?'Cancel population':'Identify & populate'} onPress={()=>populationRunning?void cancelPopulation():void populateLibrary()}/>:null}"
+        },
+        {
+          "old": "            <Button label={populating?'Cancel population':'Identify & populate'} disabled={!localBooks.length||libraryRefreshActive} onPress={()=>populating?populationOwner.current?.abort():void populateLibrary()}/>",
+          "new": "            <Button label={populationRunning?'Cancel population':'Identify & populate'} disabled={!localBooks.length||libraryRefreshActive} onPress={()=>populationRunning?void cancelPopulation():void populateLibrary()}/>"
+        },
+        {
+          "old": "\n        {populationStatus?<Text accessibilityLiveRegion=\"polite\" style={[styles.meta,{color:p.muted}]}>{populationStatus}</Text>:null}\n",
+          "new": "\n        <PopulationStatus/>\n"
+        },
+        {
+          "old": "\n            {populationStatus?<Text accessibilityLiveRegion=\"polite\" style={[styles.meta,{color:p.muted}]}>{populationStatus}</Text>:null}\n",
+          "new": "\n            <PopulationStatus/>\n"
+        },
+        {
+          "old": "{setupReady?<Text accessibilityLabel=\"Step 2 complete\"",
+          "new": "{populationStats.complete?<Text accessibilityLabel=\"Step 2 complete\""
+        },
+        {
+          "old": "? (localBooks.length+serverWorks.length)+' items ready'+(reviewCount?' · '+reviewCount+' local items need review':'')",
+          "new": "? populationStats.complete?'Identification finished. Review only the remaining items.':(localBooks.length+serverWorks.length)+' items ready to identify'"
+        },
+        {
+          "old": "  function LocalScanStatus(){",
+          "new": "  function PopulationStatus(){\n    if(!populationSnapshot?.preparing&&!populationStats.total)return populationStatus?<Text accessibilityLiveRegion=\"polite\" style={[styles.meta,{color:p.muted}]}>{populationStatus}</Text>:null;\n    const preparing=populationSnapshot?.preparing;\n    const percent=preparing?(preparing.total?Math.floor(preparing.processed/preparing.total*100):0):populationStats.percent;\n    const count=preparing?preparing.processed+' / '+preparing.total:populationStats.processed+' / '+populationStats.total;\n    return <View accessibilityLiveRegion=\"polite\" style={[styles.scanBanner,styles.scanBannerStable,{borderTopColor:p.line,borderBottomColor:p.line}]}>\n      {populationRunning?<ArchivistBookLoader label=\"Identifying library\" size=\"standard\" reduceMotion={reduceMotion}/>:null}\n      <View style={{flex:1,minWidth:0,gap:3}}>\n        <View style={styles.scanProgressHeading}><Text style={[styles.scanBannerTitle,{color:p.ink}]}>{preparing?'Preparing identification':populationStats.complete?'Identification complete':populationRunning?'Identify & populate':'Population paused'}</Text><Text style={[styles.scanProgressPercent,{color:p.muted}]}>{count} · {percent}%</Text></View>\n        <Text style={[styles.scanBannerDetail,{color:p.muted}]}>{populationStats.identified} identified · {populationStats.unresolved} unresolved · {populationStats.retrying} waiting to retry</Text>\n        {populationSnapshot?.operation?<Text numberOfLines={2} style={[styles.scanBannerDetail,{color:p.muted}]}>{populationSnapshot.operation}</Text>:null}\n        <View accessibilityRole=\"progressbar\" accessibilityValue={{min:0,max:100,now:percent}} style={[styles.scanProgressTrack,{backgroundColor:p.line}]}><View style={[styles.scanProgressFill,{backgroundColor:p.sage,width:(percent+'%') as any}]} /></View>\n        <Text style={[styles.scanBannerDetail,{color:p.muted}]}>{preparing?'Preparing the saved work queue.':populationStatus}</Text>\n      </View>\n    </View>;\n  }\n\n  function LocalScanStatus(){"
+        },
+        {
+          "old": "return current.map(book=>byUri.get(book.uri)||book);",
+          "new": "return current.map(book=>book.uri?byUri.get(book.uri)||book:book);"
         }
       ],
-      "current": "2c84a20cd1b10c6379c201a4367e416d533c8ac6"
+      "current": "1032ae4928e09e36f33a0f34ec38ce72e06fb263"
     },
     "mobile/speechFocus.generated.ts": {
       "previous": "5aa6ed24f64542d80f11d3f0d54986f0d070b7e9",

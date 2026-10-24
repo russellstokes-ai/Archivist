@@ -1,3 +1,9 @@
+## Current follow-up: population repair (24 October 2026)
+
+Current repair validation: 205/205 mobile suites across the full run and targeted rerun; TypeScript passed. No APK built for this repair yet.
+
+QA 40090999658 was delivered, then the owner reported a stalled population and unexpected navigation. See [population repair](docs/v1/POPULATION_REPAIR_2026-10-24.md) for the changes, evidence and remaining device acceptance. Do not describe the original device stall as reproduced or the new build as device-accepted.
+
 # Current continuation: recognition repairs (23 October 2026)
 
 See `docs/v1/RECOGNITION_FOLLOWUP_2026-10-23.md` for this repair set, test evidence and explicit remaining scope. The bottom-of-Settings diagnostic export is retained and now includes bounded per-file inspection/grouping clues after a rescan. Do not describe all P0-P12 work as complete. Audio transcription is excluded. Current combined source passes 202/202 mobile suites, TypeScript and Android Java/Kotlin compilation. GitHub release lint and real CB7 JNI extraction remain release gates; no APK may be dispatched until they pass. See the closure section of that handoff; the old validation counts are historical.

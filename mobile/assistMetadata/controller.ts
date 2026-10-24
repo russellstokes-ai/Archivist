@@ -1,3 +1,4 @@
+import {boundedIdentification} from './identificationDeadline';
 import {metadataDatabase} from '../scannerVNext/metadataWrites';
 import type {ScannerDatabase} from '../scannerVNext/store';
 import type {MetadataWork,WorkFields} from '../scannerVNext/fieldEvidence';
@@ -38,7 +39,7 @@ export async function createImprovedAssist(db:ScannerDatabase,store:AssistMetada
  async function start(work:MetadataWork,policy:AssistPolicy){
   active.get(work.workId)?.abort();const owner=new AbortController();active.set(work.workId,owner);
   await persist(work,{revision:work.revision,state:'pending',updated:Date.now()},owner);
-  const completion=(async():Promise<State>=>{
+  const completion=boundedIdentification(async():Promise<State>=>{
    try{
     policy={...policy,mediaKind:await mediaKind(work.workId)};
     const neighbours=policy.automatic&&policy.clues===undefined?await loadNeighbourContext(db,work):null;
@@ -49,6 +50,7 @@ export async function createImprovedAssist(db:ScannerDatabase,store:AssistMetada
     if(!selected&&policy.automatic&&policy.clues===undefined&&deepSearch){
      try{const deep=await deepSearch(work,result,policy,owner.signal);if(deep){result=deep.result;selected=deep.candidate;}}catch{if(owner.signal.aborted)throw Error('Search cancelled');}
     }
+    if(owner.signal.aborted||active.get(work.workId)!==owner)return {revision:work.revision,state:'cancelled',updated:Date.now()};
     const winner=selected?supplementCandidate(selected,result.candidates.map(r=>r.candidate)):null;
     if(winner){
      const patch=work.identityConfirmed?fillMissing(work,winner):null;
@@ -66,7 +68,7 @@ export async function createImprovedAssist(db:ScannerDatabase,store:AssistMetada
     const state:State={revision:work.revision,state:owner.signal.aborted?'cancelled':'error',updated:Date.now()};
     await persist(work,state,owner).catch(()=>false);return state;
    }finally{if(active.get(work.workId)===owner)active.delete(work.workId);}
-  })();return {work,completion};
+  },owner).catch(():State=>({revision:work.revision,state:'error',updated:Date.now()})).finally(()=>{if(active.get(work.workId)===owner)active.delete(work.workId);});return {work,completion};
  }
  return {
   get,

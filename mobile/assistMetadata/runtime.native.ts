@@ -54,7 +54,8 @@ export async function createAndroidCatalogueRuntime(settings:Parameters<typeof c
  let coverDrain:Promise<void>|undefined,coverTimer:ReturnType<typeof setTimeout>|undefined;
  const coverOwner=new AbortController();
  let identifyDrain:Promise<void>|undefined,identifyTimer:ReturnType<typeof setTimeout>|undefined,identifyOwner:AbortController|undefined;
- let fileOperation='';
+ let fileOperation='',identificationOperation='';
+ let populationPreparing:{processed:number;total:number}|null=null;
  const listeners=new Set<(id?:string)=>void>();
  const notify=(id?:string)=>{for(const listener of listeners){try{listener(id);}catch{/* A UI observer cannot interrupt file recovery. */}}};
  function scheduleWrites(delay:number){if(disposed)return;if(writeTimer)clearTimeout(writeTimer);writeTimer=setTimeout(()=>{writeTimer=undefined;resumeWrites();},Math.max(250,delay));}
@@ -155,6 +156,7 @@ export async function createAndroidCatalogueRuntime(settings:Parameters<typeof c
     const work=await store.get(next.itemId);
     if(work&&work.revision>next.revision){await jobs.enqueue(work.workId,work.revision,'identify');next=await jobs.next('identify');continue;}
     const job=await jobs.start(next.itemId,'identify');
+    if(job){identificationOperation='Looking up '+(work?.fields.title||'an item');notify();}
     if(job){
      if(!work||work.revision<job.revision)await jobs.finish(job,'blocked','unavailable');
      else{
@@ -170,13 +172,13 @@ export async function createAndroidCatalogueRuntime(settings:Parameters<typeof c
        }else await jobs.finish(job,'done','complete');
        await queueSavedWork(work.workId);notify(work.workId);
       }catch{await jobs.finish(job,'retry',owner.signal.aborted?'cancelled':'lookup-unavailable');}
-      finally{owner.signal.removeEventListener('abort',cancel);}
+      finally{owner.signal.removeEventListener('abort',cancel);identificationOperation='';notify();}
      }
     }
     next=await jobs.next('identify');
    }
   })().catch(()=>{failed=true;}).finally(async()=>{
-   identifyDrain=undefined;await refreshRelations();if(identifyOwner===owner)identifyOwner=undefined;
+   identifyDrain=undefined;identificationOperation='';notify();await refreshRelations();if(identifyOwner===owner)identifyOwner=undefined;
    if(disposed||owner.signal.aborted)return;
    try{if(!await populationEnabled())return;const wake=await jobs.nextWake('identify');if(wake!==null)scheduleIdentification(failed?30000:wake-Date.now());}catch{scheduleIdentification(30000);}
    notify();
@@ -297,19 +299,23 @@ export async function createAndroidCatalogueRuntime(settings:Parameters<typeof c
   const reasons=currentReview(work,issues,staged?.revision===work.revision?JSON.parse(staged.payload).reasons||[]:[]);
   return rows.map(row=>({...row,...work.fields,metadataFileStatus,seriesNumber:Number(work.fields.seriesNumber)||undefined,publishedYear:Number(work.fields.publishedYear)||undefined,coverUri:cachedCover||work.fields.coverUri||row.coverUri,coverThumbnailUri:cachedThumbnail||row.coverThumbnailUri,needsReview:reasons.length>0,reviewReason:reasons.join(' · ')}));
  }
- async function enrich(books:LocalBook[],policy:AssistPolicy,onRows:(rows:ScannerBook[])=>Promise<void>,signal?:AbortSignal){
+ async function enrich(books:LocalBook[],policy:AssistPolicy,onRows:((rows:ScannerBook[])=>Promise<void>)|undefined,signal?:AbortSignal){
   const groups=new Map<string,LocalBook>();for(const book of books){const id=(book as ScannerBook).scannerWorkId;if(id&&!groups.has(id))groups.set(id,book);}
   // Persist the whole requested batch before processing. A process restart
   // resumes the remaining items rather than forgetting all but the current one.
-  for(const [id]of groups){
-   check(signal);const work=await store.get(id);if(!work)continue;
-   await jobs.enqueue(id,work.revision,'identify',!!policy.retry);
-   await queueArtwork(id,!!policy.retry);
-  }
-  if(!policy.online){await pausePopulation();for(const id of groups.keys()){check(signal);await onRows(await refresh(id,signal));}return;}
+  populationPreparing={processed:0,total:groups.size};notify();
+  try{
+   for(const [id]of groups){
+    check(signal);const work=await store.get(id);
+    if(work)await jobs.enqueue(id,work.revision,'identify',!!policy.retry);
+    populationPreparing.processed++;
+    if(populationPreparing.processed%25===0){notify();await new Promise(resolve=>setTimeout(resolve,0));}
+   }
+  }finally{populationPreparing=null;notify();}
+  if(!policy.online){await pausePopulation();for(const id of groups.keys()){check(signal);if(onRows)await onRows(await refresh(id,signal));}return;}
   check(signal);await db.runAsync('INSERT INTO assist_population_control VALUES(1,1) ON CONFLICT(id) DO UPDATE SET enabled=1');
   let updates=Promise.resolve(),updateError:unknown;
-  const updated=(id?:string)=>{if(id&&groups.has(id))updates=updates.then(async()=>{check(signal);await onRows(await refresh(id,signal));}).catch(error=>{updateError=error;});};
+  const updated=(id?:string)=>{if(onRows&&id&&groups.has(id))updates=updates.then(async()=>{check(signal);if(onRows)await onRows(await refresh(id,signal));}).catch(error=>{updateError=error;});};
   const cancel=()=>{identifyOwner?.abort();void pausePopulation().catch(()=>{});};
   listeners.add(updated);signal?.addEventListener('abort',cancel,{once:true});
   try{
@@ -319,7 +325,7 @@ export async function createAndroidCatalogueRuntime(settings:Parameters<typeof c
    // before any of the newly queued items have been processed.
    if(identifyDrain)await identifyDrain;
    check(signal);await resumeIdentification();check(signal);await updates;if(updateError)throw updateError;
-   for(const id of groups.keys()){check(signal);await onRows(await refresh(id,signal));}
+   for(const id of groups.keys()){check(signal);if(onRows)await onRows(await refresh(id,signal));}
   }finally{listeners.delete(updated);signal?.removeEventListener('abort',cancel);}
  }
  const scan=async(...args:Parameters<typeof base.scan>)=>{
@@ -337,7 +343,7 @@ export async function createAndroidCatalogueRuntime(settings:Parameters<typeof c
  return {...base,metadata:store,assist,refresh,enrich,scan,durableStatus,queueFileWrite,queueArtwork,libraryRelations:()=>relations.list(),
   subscribe(listener:(id?:string)=>void){listeners.add(listener);return ()=>{listeners.delete(listener);};},
   async writeProgress(){return {counts:await jobs.summary('write'),operation:fileOperation};},
-  async populationProgress(){return {enabled:await populationEnabled(),counts:await jobs.summary('identify')};},
+  async populationProgress(){return {enabled:await populationEnabled(),counts:await jobs.summary('identify'),operation:identificationOperation,preparing:populationPreparing?{...populationPreparing}:null};},
   pausePopulation,
   async recoveryOptions(id:string):Promise<{id:string;current:string;path:string}[]>{
    const writer=NativeModules.ArchivistFileMetadata;if(!writer?.pendingRecovery)throw Error('File recovery is unavailable in this version.');

@@ -19,11 +19,11 @@ assert.match(loader,/require\('\.\/assets\/motion\/book-loader\.json'\)/);
 assert.match(loader,/accessibilityRole="progressbar"/);
 const app=fs.readFileSync(__dirname+'/App.tsx','utf8');
 const pdf=fs.readFileSync(__dirname+'/LocalPdfReader.tsx','utf8');
-assert.equal((app.match(/<ArchivistBookLoader/g)||[]).length,8,'Every app spinner must use the Book Loader');
+assert.equal((app.match(/<ArchivistBookLoader/g)||[]).length,9,'Every app spinner must use the Book Loader');
 assert.equal((pdf.match(/<ArchivistBookLoader/g)||[]).length,1,'Native PDF spinner must use the Book Loader');
 assert(!app.includes('ActivityIndicator') && !pdf.includes('ActivityIndicator'),'Circular ActivityIndicator remains');
-for(const label of ['Scanning local library','Loading audio playback','Opening local reader','Opening server reader','Loading reader statistics','Checking duplicate files','Opening Archivist library','Rendering PDF page']){
+for(const label of ['Identifying library','Scanning local library','Loading audio playback','Opening local reader','Opening server reader','Loading reader statistics','Checking duplicate files','Opening Archivist library','Rendering PDF page']){
  assert((app+pdf).includes('label="'+label+'"'),'Missing loading scenario: '+label);
 }
 assert.match(app,/reduceMotion=\{reduceMotion\} onPosition=/,'PDF loader must honour reduced motion');
-console.log('PASS: exact supplied Book Loader, enlarged artwork, nine loading states, reduced motion, and no circular spinners');
+console.log('PASS: exact supplied Book Loader, enlarged artwork, ten loading states, reduced motion, and no circular spinners');

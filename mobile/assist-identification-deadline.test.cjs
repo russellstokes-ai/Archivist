@@ -1,0 +1,21 @@
+const assert=require('node:assert/strict'),fs=require('node:fs'),ts=require('typescript'),Module=require('node:module');
+require.extensions['.ts']=(m,p)=>m._compile(ts.transpileModule(fs.readFileSync(p,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText,p);
+const {boundedIdentification}=require('./assistMetadata/identificationDeadline.ts');
+const file=require.resolve('./assistMetadata/controller.ts'),m=new Module(file,module);m.filename=file;m.paths=module.paths;
+const original=m.require.bind(m);m.require=name=>name==='./identificationDeadline'?{boundedIdentification:(op,owner)=>boundedIdentification(op,owner,20)}:original(name);
+m._compile(ts.transpileModule(fs.readFileSync(file,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText,file);
+(async()=>{
+ let accepts=0,release,signal;
+ const work={workId:'one',revision:0,fields:{title:'Book',author:'Writer'},manual:{},partIds:['p']};
+ const db={execAsync:async()=>{},runAsync:async()=>{},getFirstAsync:async sql=>sql.includes('SELECT revision')?{revision:0}:null,withExclusiveTransactionAsync:async action=>action(db)};
+ const store={get:async()=>work,accept:async()=>{accepts++;return {...work,revision:1}}};
+ const service={search:async(w,options)=>{signal=options.signal;return new Promise(r=>release=r)}};
+ const controller=await m.exports.createImprovedAssist(db,store,service);
+ const search=await controller.search('one',{online:true,automatic:true});
+ assert.equal((await search.completion).state,'error');assert(signal.aborted);
+ release({state:'review',candidates:[{candidate:{id:'one',provider:'fixture',fields:{title:'Book',author:'Writer'},identifiers:[]},score:1000,conflicts:[]}],issues:[]});
+ await new Promise(r=>setTimeout(r,10));assert.equal(accepts,0,'Late provider responses cannot save after the deadline');
+ service.search=async()=>({state:'no-match',candidates:[],issues:[]});
+ const next=await controller.search('one',{online:true,automatic:true});assert.equal((await next.completion).state,'no-match','The next lookup remains usable');
+ console.log('PASS: real Assist controller releases a hung provider, rejects late saves and permits the next lookup');
+})().catch(e=>{console.error(e);process.exitCode=1});
